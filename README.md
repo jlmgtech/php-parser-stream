@@ -21,7 +21,7 @@ $> TEST=1 php ParserStream.php
 ```
 
 
-### use case ###
+### example ###
 
 ```php
 
