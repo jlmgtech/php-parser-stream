@@ -7,13 +7,17 @@ class ParserStream {
     public $charno = 0;
     public $lineno = 1;
     public $active = false;
+    public $cursor = 0;
 
     public function __construct($fp) {
         if (!is_resource($fp)) throw new Exception("Stream must be a resource");
         if ($fp === NULL)      throw new Exception("Invalid input stream");
         $this->fp = $fp;
-        $this->active = true;
-        $this->next(); // prime the file stream
+        $this->rewind();
+    }
+
+    public function ftell() {
+        return ftell($this->fp);
     }
 
     public function next(): bool {
@@ -37,7 +41,7 @@ class ParserStream {
 
     public function save(): array {
         return [
-            "ftell" => ftell($this->fp),
+            "cursor" => ftell($this->fp),
             "offset" => $this->offset,
             "charno" => $this->charno,
             "lineno" => $this->lineno,
@@ -52,7 +56,7 @@ class ParserStream {
         $this->lineno = $state["lineno"];
         $this->active = $state["active"];
         $this->curr = $state["curr"];
-        if (fseek($this->fp, $state["ftell"], SEEK_SET) === -1) {
+        if (fseek($this->fp, $state["cursor"], SEEK_SET) === -1) {
             throw new Exception("Failed to seek to offset $this->offset");
         }
     }
@@ -67,8 +71,8 @@ class ParserStream {
 
     /// returns a string between two offsets, left inclusive
     public function region(array $state_start, array $state_end): string {
-        $from = max($state_start["ftell"] - 1, 0);
-        $to = $state_end["ftell"];
+        $from = max($state_start["cursor"] - 1, 0);
+        $to = $state_end["cursor"];
         return $this->slice($from, $to);
     }
 
@@ -87,8 +91,6 @@ class ParserStream {
         $state = $this->save();
         for ($i = 0; $i < strlen($literal); $i++) {
             if ($this->curr !== $literal[$i]) {
-                $slice = $this->region($state, $this->save());
-                $this->err($state, $this->save(), "Expected '$literal', found '$slice'");
                 $this->load($state);
                 return false;
             }
@@ -97,32 +99,60 @@ class ParserStream {
         return true;
     }
 
-    public function err(array $start, array $end, string $msg = "") {
-        $start = $start["lineno"] . ":" . $start["charno"];
-        $end = $end["lineno"] . ":" . $end["charno"];
-        throw new Exception("$msg (from $start to $end)");
+    public function err(string $msg = "") {
+        $position = "line {$this->lineno}, char {$this->charno}";
+        return "parse error: $msg near $position\n";
     }
 
     public function __destruct() {
         printf("\n%s\n", "closing stream");
         fclose($this->fp);
     }
+
+    public function rewind() {
+        $this->load([
+            "curr" => "",
+            "offset" => -1,
+            "charno" => 0,
+            "lineno" => 1,
+            "active" => true,
+            "cursor" => 0,
+        ]);
+        $this->next();
+    }
 }
 
 if (getenv("TEST")) {
     // now test it with a memory stream
+
     $fp = fopen("php://memory", "rw");
-    fwrite($fp, "0123456789\nabcdefg");
+    fprintf($fp, "something, basically anything else...\n");
     rewind($fp);
 
     $stream = new ParserStream($fp);
+    $state = $stream->save();
 
-    $stream->eat("0123456789\n");
-    $stream->eat("abcdefi");
 
+
+    // print the entire parser stream:
+    echo "received: ";
     while ($stream->curr !== NULL) {
         echo $stream->curr;
         $stream->next();
+    }
+    echo "\n";
+
+    // basically rewind it:
+    $stream->load($state);
+
+    // you could also do: $stream->rewind();
+
+    if ($stream->eat("quit")) {
+        echo "quitting\n";
+    } else {
+        $range = $stream->slice($stream->offset, $stream->offset + 10);
+        $range = str_replace("\n", "\\n", $range);
+        echo $stream->err("expected 'quit' but found '$range'...");
     }
 
     echo "\n";
