@@ -2,12 +2,12 @@
 
 class ParserStream {
 
-    public $curr = "";
-    public $offset = -1;
-    public $charno = 0;
-    public $lineno = 1;
-    public $active = false;
-    public $cursor = 0;
+    public $curr = "";      // current character
+    public $offset = -1;    // -1 because we increment it before reading the first char
+    public $charno = 0;     // 1-indexed column of input stream.
+    public $lineno = 1;     // 1-indexed line number of input stream.
+    public $active = false; // true from init, false when you hit EOF
+    public $cursor = 0;     // only set when you call save() or load()
 
     public function __construct($fp) {
         if (!is_resource($fp)) throw new Exception("Stream must be a resource");
@@ -27,14 +27,13 @@ class ParserStream {
             $this->active = false;
             return false;
         }
-        $this->curr = $c;
         if ($this->curr === "\n") {
             $this->lineno++;
-            $this->charno = 0;
+            $this->charno = 1;
         } else {
             $this->charno++;
         }
-
+        $this->curr = $c;
         $this->offset++;
         return true;
     }
@@ -104,9 +103,10 @@ class ParserStream {
         return "parse error: $msg near $position\n";
     }
 
-    public function __destruct() {
-        printf("\n%s\n", "closing stream");
-        fclose($this->fp);
+    public static function fileRange($fp, int $from, int $to): string
+    {
+        fseek($fp, $from, SEEK_SET);
+        return fread($fp, $to - $from);
     }
 
     public function rewind() {
@@ -120,40 +120,4 @@ class ParserStream {
         ]);
         $this->next();
     }
-}
-
-if (getenv("TEST")) {
-    // now test it with a memory stream
-
-    $fp = fopen("php://memory", "rw");
-    fprintf($fp, "something, basically anything else...\n");
-    rewind($fp);
-
-    $stream = new ParserStream($fp);
-    $state = $stream->save();
-
-
-
-    // print the entire parser stream:
-    echo "received: ";
-    while ($stream->curr !== NULL) {
-        echo $stream->curr;
-        $stream->next();
-    }
-    echo "\n";
-
-    // basically rewind it:
-    $stream->load($state);
-
-    // you could also do: $stream->rewind();
-
-    if ($stream->eat("quit")) {
-        echo "quitting\n";
-    } else {
-        $range = $stream->slice($stream->offset, $stream->offset + 10);
-        $range = str_replace("\n", "\\n", $range);
-        echo $stream->err("expected 'quit' but found '$range'...");
-    }
-
-    echo "\n";
-}
+};

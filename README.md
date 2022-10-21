@@ -34,4 +34,10 @@ if ($stream->eat("quit")) {
     echo $this->err("expected 'quit' but found '$range'");
 }
 
+$stream->rewind();
+while ($stream->active) {
+    $stream->next();
+    echo $stream->curr;
+}
+
 ```
