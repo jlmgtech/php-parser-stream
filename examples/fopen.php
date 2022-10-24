@@ -1,21 +1,19 @@
 <?php
 
-require_once __DIR__ . "/" . "ParserStream.php";
+require_once __DIR__ . "/" . "../src/ParserStream.php";
 
 // test the parser stream with a memory file resource
-echo "press Ctrl-D to end input\n";
+echo "reading input.txt\n";
 
 // read stdin to memory file because stdin is not seekable.
-$fp = fopen("php://memory", "rw");
-while (!feof(STDIN))
-    fwrite($fp, fread(STDIN, 1024));
+$fp = fopen(__DIR__ . "/" . "input.txt", "r");
 
 $stream = new ParserStream($fp);
 // note - constructor rewinds the file pointer automatically.
 
 $success = false;
 while ($stream->active) {
-    if ($stream->eat("quit")) {
+    if ($stream->eatchr("q", "")) {
         echo "\nquit - QUITTING\n";
         $success = true;
         break;

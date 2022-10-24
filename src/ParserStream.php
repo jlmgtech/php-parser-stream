@@ -1,5 +1,10 @@
 <?php
 
+//  * eatchr(accept, errmsg)  - accept a char in accept, or report an error, advance cursor
+//  * eatstr(substr, errmsg)  - accept a string, or report an error, advance cursor
+//  * int testchr(accept)     - 1 if next char in accept, else -1, don't advance
+//  * int teststr(substr)     - strlen(substr) if starts with substr, else -1, don't advance
+
 class ParserStream {
 
     public $curr = "";      // current character
@@ -14,6 +19,52 @@ class ParserStream {
         if ($fp === NULL)      throw new Exception("Invalid input stream");
         $this->fp = $fp;
         $this->rewind();
+    }
+
+    public function eatchr(string $accept, string $errmsg) {
+        $state = $this->save();
+        if (strchr($accept, $this->peek()) === FALSE) {
+            $slice = str_replace("\n", "\\n", $this->substr($state, 10));
+            $errmsg = $errmsg ? $errmsg : "expected one of '$accept' but found '$slice'";
+            die($this->err($errmsg));
+        }
+        $this->next();
+    }
+
+    public function eatstr(string $string, string $errmsg) {
+        $state = $this->save();
+        for ($i = 0; $i < strlen($string); $i++) {
+            if ($this->curr !== $string[$i]) {
+                $this->load($state);
+                $cursor = $state["cursor"];
+                $slice = $this->substr($state, strlen($string)+10);
+                $slice = str_replace("\n", "\\n", $slice);
+                $errmsg = $errmsg ?: "Expected \"$string\", but found '{$slice}' instead";
+                die($this->err($errmsg));
+            }
+            $this->next();
+        }
+    }
+
+    public function substr($state, $len) {
+        return $this->slice($state["cursor"], $state["cursor"] + $len);
+    }
+
+    public function testchr(string $accept) {
+        return (strchr($accept, $this->peek()) === FALSE) ? -1 : 1;
+    }
+
+    public function teststr(string $substr) {
+        $state = $this->save();
+        for ($i = 0; $i < strlen($substr); $i++) {
+            if ($this->curr !== $substr[$i]) {
+                $this->load($state);
+                return -1;
+            }
+            $this->next();
+        }
+        $this->load($state);
+        return strlen($substr);
     }
 
     public function ftell() {
@@ -86,6 +137,8 @@ class ParserStream {
 
     /// consume the following string from the input stream, advancing the cursor.
     /// if the string is not found, the cursor is not advanced and false is returned.
+    /// DEPRECATED in favor of test and eat functions
+    /// SEE ALSO - eatstr, eatchr, teststr, testchr
     public function eat(string $literal): bool {
         $state = $this->save();
         for ($i = 0; $i < strlen($literal); $i++) {
@@ -98,7 +151,7 @@ class ParserStream {
         return true;
     }
 
-    public function err(string $msg = "") {
+    public function err(string $msg = ""): string {
         $position = "line {$this->lineno}, char {$this->charno}";
         return "parse error: $msg near $position\n";
     }
